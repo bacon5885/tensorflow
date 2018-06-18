@@ -21,6 +21,9 @@ import android.graphics.Bitmap;
 import android.os.SystemClock;
 import android.os.Trace;
 import android.util.Log;
+
+import org.tensorflow.lite.Interpreter;
+
 import java.io.BufferedReader;
 import java.io.FileInputStream;
 import java.io.IOException;
@@ -34,7 +37,6 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.PriorityQueue;
 import java.util.Vector;
-import org.tensorflow.lite.Interpreter;
 
 /** A classifier specialized to label images using TensorFlow. */
 public class TFLiteImageClassifier implements Classifier {
@@ -98,6 +100,7 @@ public class TFLiteImageClassifier implements Classifier {
       }
       br.close();
     } catch (IOException e) {
+      Log.e(TAG, "Problem reading label file: " + labelFilename , e);
       throw new RuntimeException("Problem reading label file!" , e);
     }
 
@@ -109,6 +112,7 @@ public class TFLiteImageClassifier implements Classifier {
     try {
       c.tfLite = new Interpreter(loadModelFile(assetManager, modelFilename));
     } catch (Exception e) {
+      Log.e(TAG, "Problem reading model file: " + modelFilename , e);
       throw new RuntimeException(e);
     }
 
