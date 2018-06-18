@@ -26,13 +26,15 @@ import android.media.ImageReader.OnImageAvailableListener;
 import android.os.SystemClock;
 import android.util.Size;
 import android.util.TypedValue;
-import java.util.List;
-import java.util.Vector;
+
 import org.tensorflow.demo.OverlayView.DrawCallback;
 import org.tensorflow.demo.env.BorderedText;
 import org.tensorflow.demo.env.ImageUtils;
 import org.tensorflow.demo.env.Logger;
-import org.tensorflow.lite.demo.R; // Explicit import needed for internal Google builds.
+import org.tensorflow.lite.demo.R;
+
+import java.util.List;
+import java.util.Vector;
 
 public class ClassifierActivity extends CameraActivity implements OnImageAvailableListener {
   private static final Logger LOGGER = new Logger();
@@ -65,8 +67,10 @@ public class ClassifierActivity extends CameraActivity implements OnImageAvailab
   // --input_binary=true
   private static final int INPUT_SIZE = 224;
 
-  private static final String MODEL_FILE = "mobilenet_quant_v1_224.tflite";
-  private static final String LABEL_FILE = "labels_mobilenet_quant_v1_224.txt";
+//  private static final String MODEL_FILE = "mobilenet_quant_v1_224.tflite";
+//  private static final String LABEL_FILE = "labels_mobilenet_quant_v1_224.txt";
+  private static final String MODEL_FILE = "optimized.lite";
+  private static final String LABEL_FILE = "label_map.pbtxt";
 
   private static final boolean MAINTAIN_ASPECT = true;
 
