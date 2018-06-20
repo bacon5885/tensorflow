@@ -17,5 +17,6 @@ RUN unzip /sdk-tools-linux-4333796.zip -d /android
 RUN cd /android && yes | ./tools/bin/sdkmanager --licenses
 RUN cd /android && ./tools/bin/sdkmanager "platforms;android-24" "platform-tools" "build-tools;26.0.1"
 COPY WORKSPACE /tensorflow/WORKSPACE
+COPY assets/QUANTIZED_UINT8.lite assets/labels_list.txt /tensorflow/tensorflow/contrib/lite/examples/android/assets/
+COPY src/org/tensorflow/demo/TFLiteObjectDetectionAPIModel.java src/org/tensorflow/demo/DetectorActivity.java /tensorflow/tensorflow/contrib/lite/examples/android/src/org/tensorflow/demo/
 RUN bazel build -c opt --cxxopt='--std=c++11' //tensorflow/contrib/lite/examples/android:tflite_demo
-

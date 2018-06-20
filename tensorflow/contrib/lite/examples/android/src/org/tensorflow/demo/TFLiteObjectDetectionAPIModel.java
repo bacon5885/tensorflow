@@ -47,7 +47,7 @@ public class TFLiteObjectDetectionAPIModel implements Classifier {
 
   // Only return this many results.
   private static final int NUM_RESULTS = 1917;
-  private static final int NUM_CLASSES = 91;
+  private static final int NUM_CLASSES = 3;
 
   private static final float Y_SCALE = 10.0f;
   private static final float X_SCALE = 10.0f;
@@ -62,13 +62,10 @@ public class TFLiteObjectDetectionAPIModel implements Classifier {
   // Pre-allocated buffers.
   private Vector<String> labels = new Vector<String>();
   private int[] intValues;
-  private float[][][] outputLocations;
+  private float[][][][] outputLocations;
   private float[][][] outputClasses;
 
-  // The object detection model (ssdlite-mobilenetv2) assumes an int image.
-  // float[][][][] img;
-  boolean useFloatImg = false;
-  int[][][][] img;
+  float[][][][] img;
 
   private Interpreter tfLite;
 
@@ -123,22 +120,23 @@ public class TFLiteObjectDetectionAPIModel implements Classifier {
     LOGGER.i("Loaded box priors!");
   }
 
-  void decodeCenterSizeBoxes(float[][][] predictions) {
+  void decodeCenterSizeBoxes(float[][][][] predictions) {
+    // 'predictions' has the predicted bounding boxes.
     for (int i = 0; i < NUM_RESULTS; ++i) {
-      float ycenter = predictions[0][i][0] / Y_SCALE * boxPriors[2][i] + boxPriors[0][i];
-      float xcenter = predictions[0][i][1] / X_SCALE * boxPriors[3][i] + boxPriors[1][i];
-      float h = (float) Math.exp(predictions[0][i][2] / H_SCALE) * boxPriors[2][i];
-      float w = (float) Math.exp(predictions[0][i][3] / W_SCALE) * boxPriors[3][i];
+      float ycenter = predictions[0][i][0][0] / Y_SCALE * boxPriors[2][i] + boxPriors[0][i];
+      float xcenter = predictions[0][i][0][1] / X_SCALE * boxPriors[3][i] + boxPriors[1][i];
+      float h = (float) Math.exp(predictions[0][i][0][2] / H_SCALE) * boxPriors[2][i];
+      float w = (float) Math.exp(predictions[0][i][0][3] / W_SCALE) * boxPriors[3][i];
 
       float ymin = ycenter - h / 2.f;
       float xmin = xcenter - w / 2.f;
       float ymax = ycenter + h / 2.f;
       float xmax = xcenter + w / 2.f;
 
-      predictions[0][i][0] = ymin;
-      predictions[0][i][1] = xmin;
-      predictions[0][i][2] = ymax;
-      predictions[0][i][3] = xmax;
+      predictions[0][i][0][0] = ymin;
+      predictions[0][i][0][1] = xmin;
+      predictions[0][i][0][2] = ymax;
+      predictions[0][i][0][3] = xmax;
     }
   }
 
@@ -182,7 +180,7 @@ public class TFLiteObjectDetectionAPIModel implements Classifier {
     d.img = new float[1][inputSize][inputSize][3];
 
     d.intValues = new int[d.inputSize * d.inputSize];
-    d.outputLocations = new float[1][NUM_RESULTS][4];
+    d.outputLocations = new float[1][NUM_RESULTS][1][4];
     d.outputClasses = new float[1][NUM_RESULTS][NUM_CLASSES];
     return d;
   }
@@ -216,7 +214,7 @@ public class TFLiteObjectDetectionAPIModel implements Classifier {
 
     // Copy the input data into TensorFlow.
     Trace.beginSection("feed");
-    outputLocations = new float[1][NUM_RESULTS][4];
+    outputLocations = new float[1][NUM_RESULTS][1][4];
     outputClasses = new float[1][NUM_RESULTS][NUM_CLASSES];
 
     Object[] inputArray = {img};
@@ -266,10 +264,10 @@ public class TFLiteObjectDetectionAPIModel implements Classifier {
       if (topClassScore > 0.001f) {
         final RectF detection =
             new RectF(
-                outputLocations[0][i][1] * inputSize,
-                outputLocations[0][i][0] * inputSize,
-                outputLocations[0][i][3] * inputSize,
-                outputLocations[0][i][2] * inputSize);
+                outputLocations[0][i][0][1] * inputSize,
+                outputLocations[0][i][0][0] * inputSize,
+                outputLocations[0][i][0][3] * inputSize,
+                outputLocations[0][i][0][2] * inputSize);
 
         pq.add(
             new Recognition(
