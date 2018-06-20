@@ -202,15 +202,14 @@ public class TFLiteObjectDetectionAPIModel implements Classifier {
     for (int i = 0; i < inputSize; ++i) {
       for (int j = 0; j < inputSize; ++j) {
         int pixel = intValues[j * inputSize + i];
-        if (useFloatImg) {
-          img[0][j][i][2] = (float) (pixel & 0xFF) / 128.0f - 1.0f;
-          img[0][j][i][1] = (float) ((pixel >> 8) & 0xFF) / 128.0f - 1.0f;
-          img[0][j][i][0] = (float) ((pixel >> 16) & 0xFF) / 128.0f - 1.0f;
-        } else {
-          img[0][j][i][2] = (int) (pixel & 0xFF);
-          img[0][j][i][1] = (int) ((pixel >> 8) & 0xFF);
-          img[0][j][i][0] = (int) ((pixel >> 16) & 0xFF);
-        }
+        // using float img
+        img[0][j][i][2] = (float) (pixel & 0xFF) / 128.0f - 1.0f;
+        img[0][j][i][1] = (float) ((pixel >> 8) & 0xFF) / 128.0f - 1.0f;
+        img[0][j][i][0] = (float) ((pixel >> 16) & 0xFF) / 128.0f - 1.0f;
+        // using int img
+        //img[0][j][i][2] = (int) (pixel & 0xFF);
+        //img[0][j][i][1] = (int) ((pixel >> 8) & 0xFF);
+        //img[0][j][i][0] = (int) ((pixel >> 16) & 0xFF); 
       }
     }
     Trace.endSection(); // preprocessBitmap
@@ -226,7 +225,11 @@ public class TFLiteObjectDetectionAPIModel implements Classifier {
     outputMap.put(1, outputClasses);
     Trace.endSection();
 
+    // **********************************************
     // Run the inference call.
+    // 
+    // inputArray only contains img, which is 300 x 300 x 3 float numbers (1080000 bytes)
+    // **********************************************
     Trace.beginSection("run");
     tfLite.runForMultipleInputsOutputs(inputArray, outputMap);
     Trace.endSection();
