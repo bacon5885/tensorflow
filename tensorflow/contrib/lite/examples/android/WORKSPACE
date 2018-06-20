@@ -30,16 +30,16 @@ android_workspace()
 # Added for android (zz)
 android_sdk_repository(
     name = "androidsdk",
-    api_level = 23,
+    api_level = 24,  # was 23
     # Ensure that you have the build_tools_version below installed in the
     # SDK manager as it updates periodically.
-    build_tools_version = "26.0.2",
+    build_tools_version = "26.0.1",
     # Replace with path to Android SDK on your system
-    path = "/android-sdk-tools",
+    path = "/android",
 )
 android_ndk_repository(
     name="androidndk",
-    path="/android-ndk",
+    path="/android-ndk-r10e",
     # This needs to be 14 or higher to compile TensorFlow.
     # Please specify API level to >= 21 to build for 64-bit
     # archtectures or the Android NDK will automatically select biggest

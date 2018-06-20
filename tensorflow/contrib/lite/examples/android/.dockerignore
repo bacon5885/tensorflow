@@ -1,1 +1,5 @@
 android-ndk-r17b/
+android-ndk-r17*
+tools/*
+android-sdk-linux
+android-sdk*
