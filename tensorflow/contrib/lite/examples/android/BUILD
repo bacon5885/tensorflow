@@ -30,6 +30,8 @@ android_binary(
     # Remove undesired models (and corresponding Activities in source)
     # to reduce APK size.
     assets = [
+        "//tensorflow/contrib/lite/examples/android/assets:optimized.lite",
+        "//tensorflow/contrib/lite/examples/android/assets:label_map.pbtxt",
         "//tensorflow/contrib/lite/examples/android/assets:labels_mobilenet_quant_v1_224.txt",
         "@tflite_mobilenet//:mobilenet_quant_v1_224.tflite",
         "@tflite_conv_actions_frozen//:conv_actions_frozen.tflite",
@@ -44,6 +46,7 @@ android_binary(
     manifest = "AndroidManifest.xml",
     nocompress_extensions = [
         ".tflite",
+        ".lite",
     ],
     resource_files = glob(["res/**"]),
     tags = [

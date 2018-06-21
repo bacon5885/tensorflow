@@ -21,6 +21,9 @@ import android.graphics.Bitmap;
 import android.os.SystemClock;
 import android.os.Trace;
 import android.util.Log;
+
+import org.tensorflow.lite.Interpreter;
+
 import java.io.BufferedReader;
 import java.io.FileInputStream;
 import java.io.IOException;
@@ -34,7 +37,6 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.PriorityQueue;
 import java.util.Vector;
-import org.tensorflow.lite.Interpreter;
 
 /** A classifier specialized to label images using TensorFlow. */
 public class TFLiteImageClassifier implements Classifier {
@@ -50,8 +52,10 @@ public class TFLiteImageClassifier implements Classifier {
 
   private static final int DIM_PIXEL_SIZE = 3;
 
-  private static final int DIM_IMG_SIZE_X = 224;
-  private static final int DIM_IMG_SIZE_Y = 224;
+//  private static final int DIM_IMG_SIZE_X = 224;
+//  private static final int DIM_IMG_SIZE_Y = 224;
+  private static final int DIM_IMG_SIZE_X = 300;
+  private static final int DIM_IMG_SIZE_Y = 300;
 
   byte[][] labelProb;
 
