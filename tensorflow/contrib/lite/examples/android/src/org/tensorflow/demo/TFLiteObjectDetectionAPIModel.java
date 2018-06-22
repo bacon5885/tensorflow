@@ -20,6 +20,10 @@ import android.content.res.AssetManager;
 import android.graphics.Bitmap;
 import android.graphics.RectF;
 import android.os.Trace;
+
+import org.tensorflow.demo.env.Logger;
+import org.tensorflow.lite.Interpreter;
+
 import java.io.BufferedReader;
 import java.io.FileInputStream;
 import java.io.IOException;
@@ -35,258 +39,266 @@ import java.util.Map;
 import java.util.PriorityQueue;
 import java.util.StringTokenizer;
 import java.util.Vector;
-import org.tensorflow.demo.env.Logger;
-import org.tensorflow.lite.Interpreter;
 
 /**
  * Wrapper for frozen detection models trained using the Tensorflow Object Detection API:
  * github.com/tensorflow/models/tree/master/research/object_detection
  */
 public class TFLiteObjectDetectionAPIModel implements Classifier {
-  private static final Logger LOGGER = new Logger();
+    private static final Logger LOGGER = new Logger();
 
-  // Only return this many results.
-  private static final int NUM_RESULTS = 1917;
-  private static final int NUM_CLASSES = 91;
+    // Only return this many results.
+    private static final int NUM_RESULTS = 1917;
+    private static final int NUM_CLASSES = 3;
 
-  private static final float Y_SCALE = 10.0f;
-  private static final float X_SCALE = 10.0f;
-  private static final float H_SCALE = 5.0f;
-  private static final float W_SCALE = 5.0f;
+    private static final float Y_SCALE = 10.0f;
+    private static final float X_SCALE = 10.0f;
+    private static final float H_SCALE = 5.0f;
+    private static final float W_SCALE = 5.0f;
 
-  // Config values.
-  private int inputSize;
+    // Config values.
+    private int inputSize;
 
-  private final float[][] boxPriors = new float[4][NUM_RESULTS];
+    private final float[][] boxPriors = new float[4][NUM_RESULTS];
 
-  // Pre-allocated buffers.
-  private Vector<String> labels = new Vector<String>();
-  private int[] intValues;
-  private float[][][] outputLocations;
-  private float[][][] outputClasses;
+    // Pre-allocated buffers.
+    private Vector<String> labels = new Vector<String>();
+    private int[] intValues;
+    private float[][][][] outputLocations;
+    private float[][][] outputClasses;
 
-  float[][][][] img;
+    float[][][][] img;
 
-  private Interpreter tfLite;
+    private Interpreter tfLite;
 
-  private float expit(final float x) {
-    return (float) (1. / (1. + Math.exp(-x)));
-  }
-
-  /** Memory-map the model file in Assets. */
-  private static MappedByteBuffer loadModelFile(AssetManager assets, String modelFilename)
-      throws IOException {
-    AssetFileDescriptor fileDescriptor = assets.openFd(modelFilename);
-    FileInputStream inputStream = new FileInputStream(fileDescriptor.getFileDescriptor());
-    FileChannel fileChannel = inputStream.getChannel();
-    long startOffset = fileDescriptor.getStartOffset();
-    long declaredLength = fileDescriptor.getDeclaredLength();
-    return fileChannel.map(FileChannel.MapMode.READ_ONLY, startOffset, declaredLength);
-  }
-
-  private void loadCoderOptions(
-      final AssetManager assetManager, final String locationFilename, final float[][] boxPriors)
-      throws IOException {
-    // Try to be intelligent about opening from assets or sdcard depending on prefix.
-    final String assetPrefix = "file:///android_asset/";
-    InputStream is;
-    if (locationFilename.startsWith(assetPrefix)) {
-      is = assetManager.open(locationFilename.split(assetPrefix, -1)[1]);
-    } else {
-      is = new FileInputStream(locationFilename);
+    private float expit(final float x) {
+        return (float) (1. / (1. + Math.exp(-x)));
     }
 
-    final BufferedReader reader = new BufferedReader(new InputStreamReader(is));
+    /** Memory-map the model file in Assets. */
+    private static MappedByteBuffer loadModelFile(AssetManager assets, String modelFilename)
+            throws IOException {
+        AssetFileDescriptor fileDescriptor = assets.openFd(modelFilename);
+        FileInputStream inputStream = new FileInputStream(fileDescriptor.getFileDescriptor());
+        FileChannel fileChannel = inputStream.getChannel();
+        long startOffset = fileDescriptor.getStartOffset();
+        long declaredLength = fileDescriptor.getDeclaredLength();
+        return fileChannel.map(FileChannel.MapMode.READ_ONLY, startOffset, declaredLength);
+    }
 
-    for (int lineNum = 0; lineNum < 4; ++lineNum) {
-      String line = reader.readLine();
-      final StringTokenizer st = new StringTokenizer(line, ", ");
-      int priorIndex = 0;
-      while (st.hasMoreTokens()) {
-        final String token = st.nextToken();
+    private void loadCoderOptions(
+            final AssetManager assetManager, final String locationFilename, final float[][] boxPriors)
+            throws IOException {
+        // Try to be intelligent about opening from assets or sdcard depending on prefix.
+        final String assetPrefix = "file:///android_asset/";
+        InputStream is;
+        if (locationFilename.startsWith(assetPrefix)) {
+            is = assetManager.open(locationFilename.split(assetPrefix, -1)[1]);
+        } else {
+            is = new FileInputStream(locationFilename);
+        }
+
+        final BufferedReader reader = new BufferedReader(new InputStreamReader(is));
+
+        for (int lineNum = 0; lineNum < 4; ++lineNum) {
+            String line = reader.readLine();
+            final StringTokenizer st = new StringTokenizer(line, ", ");
+            int priorIndex = 0;
+            while (st.hasMoreTokens()) {
+                final String token = st.nextToken();
+                try {
+                    final float number = Float.parseFloat(token);
+                    boxPriors[lineNum][priorIndex++] = number;
+                } catch (final NumberFormatException e) {
+                    // Silently ignore.
+                }
+            }
+            if (priorIndex != NUM_RESULTS) {
+                throw new RuntimeException(
+                        "BoxPrior length mismatch: " + priorIndex + " vs " + NUM_RESULTS);
+            }
+        }
+
+        LOGGER.i("Loaded box priors!");
+    }
+
+    void decodeCenterSizeBoxes(float[][][][] predictions) {
+        // 'predictions' has the predicted bounding boxes.
+        for (int i = 0; i < NUM_RESULTS; ++i) {
+            float ycenter = predictions[0][i][0][0] / Y_SCALE * boxPriors[2][i] + boxPriors[0][i];
+            float xcenter = predictions[0][i][0][1] / X_SCALE * boxPriors[3][i] + boxPriors[1][i];
+            float h = (float) Math.exp(predictions[0][i][0][2] / H_SCALE) * boxPriors[2][i];
+            float w = (float) Math.exp(predictions[0][i][0][3] / W_SCALE) * boxPriors[3][i];
+
+            float ymin = ycenter - h / 2.f;
+            float xmin = xcenter - w / 2.f;
+            float ymax = ycenter + h / 2.f;
+            float xmax = xcenter + w / 2.f;
+
+            predictions[0][i][0][0] = ymin;
+            predictions[0][i][0][1] = xmin;
+            predictions[0][i][0][2] = ymax;
+            predictions[0][i][0][3] = xmax;
+        }
+    }
+
+    /**
+     * Initializes a native TensorFlow session for classifying images.
+     *
+     * @param assetManager The asset manager to be used to load assets.
+     * @param modelFilename The filepath of the model GraphDef protocol buffer.
+     * @param labelFilename The filepath of label file for classes.
+     */
+    public static Classifier create(
+            final AssetManager assetManager,
+            final String modelFilename,
+            final String labelFilename,
+            final int inputSize) throws IOException {
+        final TFLiteObjectDetectionAPIModel d = new TFLiteObjectDetectionAPIModel();
+
+        d.loadCoderOptions(assetManager, "file:///android_asset/box_priors.txt", d.boxPriors);
+
+        InputStream labelsInput = null;
+        String actualFilename = labelFilename.split("file:///android_asset/")[1];
+        labelsInput = assetManager.open(modelFilename);
+        BufferedReader br = null;
+        br = new BufferedReader(new InputStreamReader(labelsInput));
+        String line;
+        while ((line = br.readLine()) != null) {
+            LOGGER.w(line);
+            d.labels.add(line);
+        }
+        br.close();
+
+        d.inputSize = inputSize;
+
         try {
-          final float number = Float.parseFloat(token);
-          boxPriors[lineNum][priorIndex++] = number;
-        } catch (final NumberFormatException e) {
-          // Silently ignore.
+            d.tfLite = new Interpreter(loadModelFile(assetManager, modelFilename));
+        } catch (Exception e) {
+            throw new RuntimeException(e);
         }
-      }
-      if (priorIndex != NUM_RESULTS) {
-        throw new RuntimeException(
-            "BoxPrior length mismatch: " + priorIndex + " vs " + NUM_RESULTS);
-      }
+
+        // Pre-allocate buffers.
+        d.img = new float[1][inputSize][inputSize][3];
+
+        d.intValues = new int[d.inputSize * d.inputSize];
+        d.outputLocations = new float[1][NUM_RESULTS][1][4];
+        d.outputClasses = new float[1][NUM_RESULTS][NUM_CLASSES];
+        return d;
     }
 
-    LOGGER.i("Loaded box priors!");
-  }
+    private TFLiteObjectDetectionAPIModel() {}
 
-  void decodeCenterSizeBoxes(float[][][] predictions) {
-    for (int i = 0; i < NUM_RESULTS; ++i) {
-      float ycenter = predictions[0][i][0] / Y_SCALE * boxPriors[2][i] + boxPriors[0][i];
-      float xcenter = predictions[0][i][1] / X_SCALE * boxPriors[3][i] + boxPriors[1][i];
-      float h = (float) Math.exp(predictions[0][i][2] / H_SCALE) * boxPriors[2][i];
-      float w = (float) Math.exp(predictions[0][i][3] / W_SCALE) * boxPriors[3][i];
+    @Override
+    public List<Recognition> recognizeImage(final Bitmap bitmap) {
+        // Log this method so that it can be analyzed with systrace.
+        Trace.beginSection("recognizeImage");
 
-      float ymin = ycenter - h / 2.f;
-      float xmin = xcenter - w / 2.f;
-      float ymax = ycenter + h / 2.f;
-      float xmax = xcenter + w / 2.f;
+        Trace.beginSection("preprocessBitmap");
+        // Preprocess the image data from 0-255 int to normalized float based
+        // on the provided parameters.
+        bitmap.getPixels(intValues, 0, bitmap.getWidth(), 0, 0, bitmap.getWidth(), bitmap.getHeight());
 
-      predictions[0][i][0] = ymin;
-      predictions[0][i][1] = xmin;
-      predictions[0][i][2] = ymax;
-      predictions[0][i][3] = xmax;
-    }
-  }
-
-  /**
-   * Initializes a native TensorFlow session for classifying images.
-   *
-   * @param assetManager The asset manager to be used to load assets.
-   * @param modelFilename The filepath of the model GraphDef protocol buffer.
-   * @param labelFilename The filepath of label file for classes.
-   */
-  public static Classifier create(
-      final AssetManager assetManager,
-      final String modelFilename,
-      final String labelFilename,
-      final int inputSize) throws IOException {
-    final TFLiteObjectDetectionAPIModel d = new TFLiteObjectDetectionAPIModel();
-
-    d.loadCoderOptions(assetManager, "file:///android_asset/box_priors.txt", d.boxPriors);
-
-    InputStream labelsInput = null;
-    String actualFilename = labelFilename.split("file:///android_asset/")[1];
-    labelsInput = assetManager.open(actualFilename);
-    BufferedReader br = null;
-    br = new BufferedReader(new InputStreamReader(labelsInput));
-    String line;
-    while ((line = br.readLine()) != null) {
-      LOGGER.w(line);
-      d.labels.add(line);
-    }
-    br.close();
-
-    d.inputSize = inputSize;
-
-    try {
-      d.tfLite = new Interpreter(loadModelFile(assetManager, modelFilename));
-    } catch (Exception e) {
-      throw new RuntimeException(e);
-    }
-
-    // Pre-allocate buffers.
-    d.img = new float[1][inputSize][inputSize][3];
-
-    d.intValues = new int[d.inputSize * d.inputSize];
-    d.outputLocations = new float[1][NUM_RESULTS][4];
-    d.outputClasses = new float[1][NUM_RESULTS][NUM_CLASSES];
-    return d;
-  }
-
-  private TFLiteObjectDetectionAPIModel() {}
-
-  @Override
-  public List<Recognition> recognizeImage(final Bitmap bitmap) {
-    // Log this method so that it can be analyzed with systrace.
-    Trace.beginSection("recognizeImage");
-
-    Trace.beginSection("preprocessBitmap");
-    // Preprocess the image data from 0-255 int to normalized float based
-    // on the provided parameters.
-    bitmap.getPixels(intValues, 0, bitmap.getWidth(), 0, 0, bitmap.getWidth(), bitmap.getHeight());
-
-    for (int i = 0; i < inputSize; ++i) {
-      for (int j = 0; j < inputSize; ++j) {
-        int pixel = intValues[j * inputSize + i];
-        img[0][j][i][2] = (float) (pixel & 0xFF) / 128.0f - 1.0f;
-        img[0][j][i][1] = (float) ((pixel >> 8) & 0xFF) / 128.0f - 1.0f;
-        img[0][j][i][0] = (float) ((pixel >> 16) & 0xFF) / 128.0f - 1.0f;
-      }
-    }
-    Trace.endSection(); // preprocessBitmap
-
-    // Copy the input data into TensorFlow.
-    Trace.beginSection("feed");
-    outputLocations = new float[1][NUM_RESULTS][4];
-    outputClasses = new float[1][NUM_RESULTS][NUM_CLASSES];
-
-    Object[] inputArray = {img};
-    Map<Integer, Object> outputMap = new HashMap<>();
-    outputMap.put(0, outputLocations);
-    outputMap.put(1, outputClasses);
-    Trace.endSection();
-
-    // Run the inference call.
-    Trace.beginSection("run");
-    tfLite.runForMultipleInputsOutputs(inputArray, outputMap);
-    Trace.endSection();
-
-    decodeCenterSizeBoxes(outputLocations);
-
-    // Find the best detections.
-    final PriorityQueue<Recognition> pq =
-        new PriorityQueue<Recognition>(
-            1,
-            new Comparator<Recognition>() {
-              @Override
-              public int compare(final Recognition lhs, final Recognition rhs) {
-                // Intentionally reversed to put high confidence at the head of the queue.
-                return Float.compare(rhs.getConfidence(), lhs.getConfidence());
-              }
-            });
-
-    // Scale them back to the input size.
-    for (int i = 0; i < NUM_RESULTS; ++i) {
-      float topClassScore = -1000f;
-      int topClassScoreIndex = -1;
-
-      // Skip the first catch-all class.
-      for (int j = 1; j < NUM_CLASSES; ++j) {
-        float score = expit(outputClasses[0][i][j]);
-
-        if (score > topClassScore) {
-          topClassScoreIndex = j;
-          topClassScore = score;
+        for (int i = 0; i < inputSize; ++i) {
+            for (int j = 0; j < inputSize; ++j) {
+                int pixel = intValues[j * inputSize + i];
+                // using float img
+                img[0][j][i][2] = (float) (pixel & 0xFF) / 128.0f - 1.0f;
+                img[0][j][i][1] = (float) ((pixel >> 8) & 0xFF) / 128.0f - 1.0f;
+                img[0][j][i][0] = (float) ((pixel >> 16) & 0xFF) / 128.0f - 1.0f;
+                // using int img
+                //img[0][j][i][2] = (int) (pixel & 0xFF);
+                //img[0][j][i][1] = (int) ((pixel >> 8) & 0xFF);
+                //img[0][j][i][0] = (int) ((pixel >> 16) & 0xFF);
+            }
         }
-      }
+        Trace.endSection(); // preprocessBitmap
 
-      if (topClassScore > 0.001f) {
-        final RectF detection =
-            new RectF(
-                outputLocations[0][i][1] * inputSize,
-                outputLocations[0][i][0] * inputSize,
-                outputLocations[0][i][3] * inputSize,
-                outputLocations[0][i][2] * inputSize);
+        // Copy the input data into TensorFlow.
+        Trace.beginSection("feed");
+        outputLocations = new float[1][NUM_RESULTS][1][4];
+        outputClasses = new float[1][NUM_RESULTS][NUM_CLASSES];
 
-        pq.add(
-            new Recognition(
-                "" + i,
-                labels.get(topClassScoreIndex),
-                outputClasses[0][i][topClassScoreIndex],
-                detection));
-      }
+        Object[] inputArray = {img};
+        Map<Integer, Object> outputMap = new HashMap<>();
+        outputMap.put(0, outputLocations);
+        outputMap.put(1, outputClasses);
+        Trace.endSection();
+
+        // **********************************************
+        // Run the inference call.
+        //
+        // inputArray only contains img, which is 300 x 300 x 3 float numbers (1080000 bytes)
+        // **********************************************
+        Trace.beginSection("run");
+        tfLite.runForMultipleInputsOutputs(inputArray, outputMap);
+        Trace.endSection();
+
+        decodeCenterSizeBoxes(outputLocations);
+
+        // Find the best detections.
+        final PriorityQueue<Recognition> pq =
+                new PriorityQueue<Recognition>(
+                        1,
+                        new Comparator<Recognition>() {
+                            @Override
+                            public int compare(final Recognition lhs, final Recognition rhs) {
+                                // Intentionally reversed to put high confidence at the head of the queue.
+                                return Float.compare(rhs.getConfidence(), lhs.getConfidence());
+                            }
+                        });
+
+        // Scale them back to the input size.
+        for (int i = 0; i < NUM_RESULTS; ++i) {
+            float topClassScore = -1000f;
+            int topClassScoreIndex = -1;
+
+            // Skip the first catch-all class.
+            for (int j = 1; j < NUM_CLASSES; ++j) {
+                float score = expit(outputClasses[0][i][j]);
+
+                if (score > topClassScore) {
+                    topClassScoreIndex = j;
+                    topClassScore = score;
+                }
+            }
+
+            if (topClassScore > 0.001f) {
+                final RectF detection =
+                        new RectF(
+                                outputLocations[0][i][0][1] * inputSize,
+                                outputLocations[0][i][0][0] * inputSize,
+                                outputLocations[0][i][0][3] * inputSize,
+                                outputLocations[0][i][0][2] * inputSize);
+
+                pq.add(
+                        new Recognition(
+                                "" + i,
+                                labels.get(topClassScoreIndex),
+                                outputClasses[0][i][topClassScoreIndex],
+                                detection));
+            }
+        }
+
+        final ArrayList<Recognition> recognitions = new ArrayList<Recognition>();
+        for (int i = 0; i < Math.min(pq.size(), 10); ++i) {
+            Recognition recog = pq.poll();
+            recognitions.add(recog);
+        }
+        Trace.endSection(); // "recognizeImage"
+        return recognitions;
     }
 
-    final ArrayList<Recognition> recognitions = new ArrayList<Recognition>();
-    for (int i = 0; i < Math.min(pq.size(), 10); ++i) {
-      Recognition recog = pq.poll();
-      recognitions.add(recog);
+    @Override
+    public void enableStatLogging(final boolean logStats) {
     }
-    Trace.endSection(); // "recognizeImage"
-    return recognitions;
-  }
 
-  @Override
-  public void enableStatLogging(final boolean logStats) {
-  }
+    @Override
+    public String getStatString() {
+        return "";
+    }
 
-  @Override
-  public String getStatString() {
-    return "";
-  }
-
-  @Override
-  public void close() {
-  }
+    @Override
+    public void close() {
+    }
 }
