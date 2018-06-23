@@ -62,7 +62,7 @@ public class DetectorActivity extends CameraActivity implements OnImageAvailable
   private static final DetectorMode MODE = DetectorMode.TF_OD_API;
 
   // Minimum detection confidence to track a detection.
-  private static final float MINIMUM_CONFIDENCE_TF_OD_API = 0.6f;
+  private static final float MINIMUM_CONFIDENCE_TF_OD_API = 0.3f;
 
   private static final boolean MAINTAIN_ASPECT = false;
 

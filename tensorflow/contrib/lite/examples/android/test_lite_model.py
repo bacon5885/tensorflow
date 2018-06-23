@@ -7,9 +7,11 @@ from PIL import Image, ImageDraw
 assert tf.__version__.startswith('1.9') or tf.__version__.startswith('1.10')
 import math
 
-
-# interpreter = tf.contrib.lite.Interpreter(model_path='QUANTIZED_UINT8.lite')
-interpreter = tf.contrib.lite.Interpreter(model_path='FLOAT.lite')
+use_uint8 = False
+if use_uint8:
+    interpreter = tf.contrib.lite.Interpreter(model_path='QUANTIZED_UINT8.lite')
+else:
+    interpreter = tf.contrib.lite.Interpreter(model_path='FLOAT.lite')
 interpreter.allocate_tensors()
 
 input_details = interpreter.get_input_details()
@@ -27,7 +29,8 @@ pil_img = Image.open('prada2.jpg').resize((300, 300))
 # pil_img = Image.open('starbucks.jpg').resize((300, 300))
 # pil_img = Image.open('cocacola.jpg').resize((300, 300))
 input_data = np.array(pil_img, dtype=np.uint8)
-input_data = input_data.astype(np.float32) / 128. - 1.
+if not use_uint8:
+    input_data = input_data.astype(np.float32) / 128. - 1.
 input_data = np.expand_dims(input_data, 0)
 print('input shape -------------------------')
 print(input_data.shape)
@@ -86,6 +89,8 @@ def softmax(X, theta = 1.0, axis = None):
 
     return p
 
+print('original output_probs:')
+print(output_probs[0, :5, :])
 output_probs = softmax(np.squeeze(output_probs), axis=-1)
 print('non-trivial output probs:')
 print(output_probs[output_probs[:, 1] > 0.3, :])
