@@ -23,7 +23,8 @@ print('')
 print('output--------------------------')
 print(output_details)
 
-pil_img = Image.open('starbucks.jpg').resize((300, 300))
+pil_img = Image.open('prada2.jpg').resize((300, 300))
+# pil_img = Image.open('starbucks.jpg').resize((300, 300))
 # pil_img = Image.open('cocacola.jpg').resize((300, 300))
 input_data = np.array(pil_img, dtype=np.uint8)
 input_data = input_data.astype(np.float32) / 128. - 1.
@@ -89,12 +90,18 @@ output_probs = softmax(np.squeeze(output_probs), axis=-1)
 print('non-trivial output probs:')
 print(output_probs[output_probs[:, 1] > 0.3, :])
 print('----------------------------------------------')
+print('highest score')
+print(max(output_probs[:, 1]))
+print('---------------------------------------')
+
+idx = np.argmax(output_probs[:, 1])
 
 # get first bbox with high enough score
-for i in range(output_probs.shape[0]):
-    if output_probs[i, 1] > 0.5:
-        selected_bb = output_locations[0, i, 0, :]
-        break
+
+if output_probs[idx, 1] > 0.3:
+    selected_bb = output_locations[0, idx, 0, :]
+else:
+    selected_bb = None
 
 def load_box_priors():
     with open('assets/box_priors.txt') as f:
@@ -150,6 +157,7 @@ def draw_bb(pil_img, bb):
     dr.line(((x, y + height), (x, y)), width=5, fill='blue')
     return pil_img
 
-
-pil_img = draw_bb(pil_img, selected_bb)
-pil_img.save('detection_result.jpg')
+if selected_bb is not None:
+    pil_img = draw_bb(pil_img, selected_bb)
+    pil_img.save('detection_result.jpg')
+    print('saved detection result as image')
